@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Ghost Protocol</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #0a0e27;
+            color: #e0e0e0;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { 
+            background: linear-gradient(135deg, #1a1f3a 0%, #2d3561 100%);
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .header-content { display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 1.8em; color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        nav { display: flex; gap: 10px; }
+        nav a { 
+            color: #e0e0e0; text-decoration: none; padding: 10px 20px; 
+            border-radius: 5px; transition: all 0.3s;
+            background: rgba(255,255,255,0.05);
+        }
+        nav a:hover, nav a.active { background: #00ff88; color: #0a0e27; }
+        
+        .settings-section {
+            background: #1e2542;
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 20px;
+            border: 1px solid rgba(0,255,136,0.1);
+        }
+        .settings-section h2 {
+            color: #00ff88;
+            margin-bottom: 20px;
+        }
+        .setting-item {
+            padding: 20px;
+            background: rgba(0,255,136,0.05);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #00ff88;
+        }
+        .setting-item h3 {
+            color: #00ff88;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .setting-item p {
+            color: #888;
+            margin-bottom: 15px;
+            line-height: 1.6;
+        }
+        .setting-value {
+            background: rgba(0,0,0,0.3);
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            color: #00ff88;
+            display: inline-block;
+        }
+        
+        .info-box {
+            background: rgba(0,204,255,0.1);
+            border-left: 4px solid #00ccff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .warning-box {
+            background: rgba(255,165,0,0.1);
+            border-left: 4px solid #ffa500;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        code {
+            background: rgba(0,0,0,0.4);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #00ff88;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <h1>🔒 Ghost Protocol</h1>
+                <nav>
+                    <a href="/">Dashboard</a>
+                    <a href="/activity">Activity</a>
+                    <a href="/stats">Statistics</a>
+                    <a href="/settings" class="active">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="settings-section">
+            <h2>⚙️ System Configuration</h2>
+            
+            <div class="setting-item">
+                <h3>Network</h3>
+                <p>Current blockchain network for transaction anonymization</p>
+                <div class="setting-value" id="network">Sepolia</div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Storm Intensity</h3>
+                <p>Number of decoy transactions generated per storm (50-150)</p>
+                <div class="setting-value">50-150 decoys</div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Storm Duration</h3>
+                <p>Time span over which decoys are distributed</p>
+                <div class="setting-value">2.0 - 8.0 seconds</div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Minimum Noise Ratio</h3>
+                <p>Required decoy-to-real transaction ratio for anonymization</p>
+                <div class="setting-value">50:1</div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>🌐 Network Configuration</h2>
+            
+            <div class="setting-item">
+                <h3>RPC Endpoints</h3>
+                <p>Public RPC endpoints used for decoy traffic</p>
+                <div id="rpc-endpoints" style="margin-top: 10px;"></div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Private RPC</h3>
+                <p>Private relay for real transactions (Flashbots, Eden Network)</p>
+                <div class="setting-value">Not Configured</div>
+                <div class="info-box" style="margin-top: 15px;">
+                    <strong>ℹ️ Info:</strong> Configure private RPC in <code>.env</code> file:<br>
+                    <code>GHOST_PRIVATE_RPC=your_endpoint_here</code>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>🔧 Advanced Settings</h2>
+            
+            <div class="setting-item">
+                <h3>Heartbeat Interval</h3>
+                <p>Background decoy generation interval (keeps device "always active")</p>
+                <div class="setting-value">5 - 45 seconds</div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Contract Cache TTL</h3>
+                <p>How long to cache blockchain contract data</p>
+                <div class="setting-value">30 minutes</div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Category Weights</h3>
+                <p>Distribution of decoy calls across DeFi categories</p>
+                <div style="margin-top: 10px;">
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        DEX (Uniswap, etc.): 30%
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        Lending (Aave, etc.): 20%
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        NFT Marketplaces: 15%
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        Bridges: 10%
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        Governance: 10%
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        ERC20 Tokens: 15%
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>📱 Wallet Integration</h2>
+            
+            <div class="warning-box">
+                <strong>⚠️ Setup Required:</strong> Configure your wallet to use Ghost Protocol
+            </div>
+            
+            <div class="setting-item">
+                <h3>RPC Proxy Address</h3>
+                <p>Point your wallet (MetaMask, etc.) to this address</p>
+                <div class="setting-value">http://localhost:8545</div>
+                <div class="info-box" style="margin-top: 15px;">
+                    <strong>On Raspberry Pi:</strong> Use <code>http://[Pi-IP]:8545</code><br>
+                    Find Pi IP with: <code>hostname -I</code>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <h3>Network Setup (MetaMask)</h3>
+                <p>Add custom network with these settings:</p>
+                <div style="margin-top: 10px;">
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        Network Name: Ghost Protocol (Sepolia)
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        RPC URL: http://localhost:8545
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        Chain ID: 11155111
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        Currency Symbol: ETH
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>📖 Configuration Files</h2>
+            
+            <div class="setting-item">
+                <h3>Environment Variables</h3>
+                <p>Edit <code>soft-pni/.env</code> to customize:</p>
+                <div style="margin-top: 10px;">
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        GHOST_NETWORK=sepolia
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        GHOST_PRIVATE_RPC=your_endpoint
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        GHOST_STORM_INTENSITY=85
+                    </div>
+                    <div class="setting-value" style="display: block; margin: 5px 0;">
+                        ETHERSCAN_API_KEY=your_key
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        fetch('/api/network')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('network').textContent = data.network;
+                
+                const rpcDiv = document.getElementById('rpc-endpoints');
+                rpcDiv.innerHTML = data.rpc_endpoints.map(rpc => 
+                    `<div class="setting-value" style="display: block; margin: 5px 0;">${rpc}</div>`
+                ).join('');
+            });
+    </script>
+</body>
+</html>

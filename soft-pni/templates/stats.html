@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics - Ghost Protocol</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: #0a0e27;
+            color: #e0e0e0;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        header { 
+            background: linear-gradient(135deg, #1a1f3a 0%, #2d3561 100%);
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        .header-content { display: flex; justify-content: space-between; align-items: center; }
+        h1 { font-size: 1.8em; color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.3); }
+        nav { display: flex; gap: 10px; }
+        nav a { 
+            color: #e0e0e0; text-decoration: none; padding: 10px 20px; 
+            border-radius: 5px; transition: all 0.3s;
+            background: rgba(255,255,255,0.05);
+        }
+        nav a:hover, nav a.active { background: #00ff88; color: #0a0e27; }
+        
+        .stats-section {
+            background: #1e2542;
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 20px;
+            border: 1px solid rgba(0,255,136,0.1);
+        }
+        .stats-section h2 {
+            color: #00ff88;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .stat-item {
+            padding: 15px;
+            background: rgba(0,255,136,0.05);
+            border-radius: 8px;
+            border-left: 4px solid #00ff88;
+        }
+        .stat-item label {
+            display: block;
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .stat-item value {
+            display: block;
+            font-size: 1.8em;
+            color: #00ff88;
+            font-weight: bold;
+        }
+        
+        .progress-bar {
+            background: rgba(255,255,255,0.1);
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+            transition: width 0.3s;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #2a3250 0%, #1e2542 100%);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,255,136,0.1);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <h1>🔒 Ghost Protocol</h1>
+                <nav>
+                    <a href="/">Dashboard</a>
+                    <a href="/activity">Activity</a>
+                    <a href="/stats" class="active">Statistics</a>
+                    <a href="/settings">Settings</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="stats-section">
+            <h2>📊 System Performance</h2>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <label>CPU Usage</label>
+                    <value id="cpu">0%</value>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="cpu-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <label>Memory Usage</label>
+                    <value id="memory">0%</value>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="memory-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <label>Disk Usage</label>
+                    <value id="disk">0%</value>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="disk-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h2>🔒 Anonymization Metrics</h2>
+            <div class="stats-grid">
+                <div class="metric-card">
+                    <label>Noise-to-Signal Ratio</label>
+                    <value id="noise-ratio">0:1</value>
+                    <p style="color: #888; font-size: 0.9em; margin-top: 10px;">
+                        Target: ≥50:1 decoys per real transaction
+                    </p>
+                </div>
+                <div class="metric-card">
+                    <label>Total Decoys Generated</label>
+                    <value id="total-decoys">0</value>
+                    <p style="color: #888; font-size: 0.9em; margin-top: 10px;">
+                        Fake transactions sent to hide real ones
+                    </p>
+                </div>
+                <div class="metric-card">
+                    <label>Storms Triggered</label>
+                    <value id="storms">0</value>
+                    <p style="color: #888; font-size: 0.9em; margin-top: 10px;">
+                        Decoy bursts generated
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-section">
+            <h2>🌐 Network Information</h2>
+            <div class="stats-grid">
+                <div class="metric-card">
+                    <label>Active Network</label>
+                    <value id="network">Sepolia</value>
+                </div>
+                <div class="metric-card">
+                    <label>RPC Endpoints</label>
+                    <value id="rpc-count">4</value>
+                    <div id="rpc-list" style="margin-top: 15px; font-size: 0.9em; color: #888;"></div>
+                </div>
+                <div class="metric-card">
+                    <label>System Uptime</label>
+                    <value id="uptime">0h 0m</value>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateStats() {
+            fetch('/api/stats')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('noise-ratio').textContent = data.noise_ratio;
+                    document.getElementById('total-decoys').textContent = data.total_decoys;
+                    document.getElementById('storms').textContent = data.storms_triggered;
+                    document.getElementById('network').textContent = data.network;
+                    document.getElementById('uptime').textContent = data.uptime;
+                    document.getElementById('rpc-count').textContent = data.rpc_endpoints;
+                });
+            
+            fetch('/api/system')
+                .then(r => r.json())
+                .then(data => {
+                    const cpuVal = parseFloat(data.cpu_usage);
+                    const memVal = parseFloat(data.memory_usage);
+                    const diskVal = parseFloat(data.disk_usage);
+                    
+                    document.getElementById('cpu').textContent = data.cpu_usage;
+                    document.getElementById('memory').textContent = data.memory_usage;
+                    document.getElementById('disk').textContent = data.disk_usage;
+                    
+                    document.getElementById('cpu-bar').style.width = cpuVal + '%';
+                    document.getElementById('memory-bar').style.width = memVal + '%';
+                    document.getElementById('disk-bar').style.width = diskVal + '%';
+                });
+            
+            fetch('/api/network')
+                .then(r => r.json())
+                .then(data => {
+                    const rpcList = document.getElementById('rpc-list');
+                    rpcList.innerHTML = data.rpc_endpoints.map(rpc => 
+                        `<div style="margin: 5px 0;">• ${rpc.replace('https://', '')}</div>`
+                    ).join('');
+                });
+        }
+
+        updateStats();
+        setInterval(updateStats, 2000);
+    </script>
+</body>
+</html>
