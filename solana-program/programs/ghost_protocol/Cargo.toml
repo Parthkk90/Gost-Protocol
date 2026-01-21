@@ -1,0 +1,23 @@
+[package]
+name = "ghost_protocol"
+version = "0.1.0"
+description = "Privacy-preserving payment credentials for retail transactions"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "ghost_protocol"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+anchor-spl = "0.32.1"
+sha2 = "0.10"
+hmac = "0.12"
+blake3 = "=1.5.5"

@@ -7,6 +7,7 @@ The Ghost Protocol eliminates metadata-based deanonymization in blockchain trans
 
 ## 🚀 Quick Start
 
+### Option 1: Software (PC/Laptop)
 ```powershell
 # Install dependencies
 cd soft-pni
@@ -24,6 +25,20 @@ python demo.py sepolia --quick
 
 See [QUICKSTART.md](QUICKSTART.md) for detailed instructions.
 
+### Option 2: Hardware (ESP32) - NEW! ⚡
+```
+1. Get an ESP32 development board ($5-10, no SD card needed!)
+2. Install Arduino IDE
+3. Upload firmware from /esp32-firmware/
+4. Access web dashboard at http://[ESP32-IP]
+```
+
+**New to ESP32?**
+- 📋 [Shopping List](ESP32_SHOPPING_LIST.md) - What to buy ($5-10)
+- ⚡ [Quick Start](QUICK_START_ESP32.md) - 5-minute setup
+- 📖 [Complete Guide](ESP32_SETUP.md) - Detailed instructions
+- 🔄 [Migration Guide](MIGRATION_PI_TO_ESP32.md) - Why ESP32 over Raspberry Pi
+
 ## 📁 Project Structure
 
 ```
@@ -38,7 +53,12 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed instructions.
   ├── config.py                - Network & API configuration
   └── demo.py                  - Complete system demonstration
   
-/firmware          - Phase 2: Hardware device firmware (PLANNED)
+/esp32-firmware    - Phase 2: ESP32 hardware implementation (NEW! ✅)
+  ├── ghost_protocol_esp32.ino - Main ESP32 firmware
+  ├── config.h                 - ESP32 configuration
+  ├── platformio.ini           - PlatformIO project file
+  └── REQUIREMENTS.md          - Hardware & software requirements
+  
 /relay-network     - Phase 3: Private RPC relay integration (PLANNED)
 ```
 
@@ -58,9 +78,11 @@ See [QUICKSTART.md](QUICKSTART.md) for detailed instructions.
 - ✅ Testnet support (Sepolia, Goerli, Mumbai, BSC)
 
 ### Phase 2 (In Progress)
+- ✅ ESP32 firmware implementation (NEW!)
+- ✅ Web-based dashboard for ESP32
+- ✅ WiFi connectivity and RPC routing
 - 🔄 Hardware TRNG integration
 - 🔄 Secure enclave for key storage
-- 🔄 ESP32/STM32 firmware port
 - 🔄 USB HID communication protocol
 - 🔄 Power-optimized operation
 
@@ -82,6 +104,23 @@ The Ghost Protocol has been tested against multiple attack vectors:
 | **Noise Ratio** | Decoys per Real TX | ≥ 50:1 | ✅ 85:1 |
 
 **Overall**: ✅ All anonymization tests passed
+
+## 🖥️ Hardware vs Software
+
+| Feature | Software (PC) | Hardware (ESP32) |
+|---------|---------------|------------------|
+| **Setup Difficulty** | Easy | Very Easy |
+| **Cost** | Free (uses existing PC) | $5-10 (ESP32 board) |
+| **Power Usage** | 50-100W | 0.5-1W |
+| **24/7 Operation** | Possible but impractical | Designed for it |
+| **Portability** | No | Yes (pocket-sized) |
+| **SD Card Required** | No | ❌ No (ESP32 has built-in flash) |
+| **Storage Needed** | ~100MB | ~1MB |
+| **Decoy Rate** | 100-200/min | 50-150/min |
+| **Web Dashboard** | Yes | Yes |
+| **Best For** | Testing & Development | Production & Deployment |
+
+**Recommendation**: Start with software for testing, deploy ESP32 for 24/7 anonymization.
 
 ## 🎯 Use Cases
 

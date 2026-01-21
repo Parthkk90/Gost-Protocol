@@ -34,7 +34,18 @@ struct PNI {
   bool is_valid;
 };
 
+// Payment Credential
+struct PaymentCredential {
+  uint8_t credential_id[16];          // 128-bit payment ID
+  uint32_t timestamp;                 // When generated
+  uint32_t counter;                   // Transaction number
+  char merchant_id[32];               // Merchant identifier
+  uint8_t signature[32];              // HMAC-SHA256 signature
+  bool is_valid;
+};
+
 PNI current_pni;
+uint32_t transaction_counter = 0;     // Global counter for all payments
 uint8_t entropy_pool[ENTROPY_POOL_SIZE];
 uint16_t entropy_index = 0;
 
@@ -211,6 +222,9 @@ public:
     EEPROM.put(3 + PNI_SIZE, pni->generation_time);
     EEPROM.put(7 + PNI_SIZE, pni->rotation_count);
     
+    // Save transaction counter at offset 256
+    EEPROM.put(256, transaction_counter);
+    
     EEPROM.commit();
   }
   
@@ -231,9 +245,13 @@ public:
     EEPROM.get(3 + PNI_SIZE, pni->generation_time);
     EEPROM.get(7 + PNI_SIZE, pni->rotation_count);
     
+    // Load transaction counter
+    EEPROM.get(256, transaction_counter);
+    
     pni->is_valid = true;
     
     Serial.println("[PNI] Loaded from EEPROM");
+    Serial.printf("[Counter] Loaded: %u transactions\n", transaction_counter);
     return true;
   }
   
@@ -251,6 +269,128 @@ public:
 };
 
 PNIGenerator pni_gen;
+
+// ===================================================================
+// PAYMENT CREDENTIAL GENERATOR
+// ===================================================================
+
+class CredentialGenerator {
+public:
+  
+  // Generate payment credential from PNI
+  void generate(PNI* pni, const char* merchant_id, PaymentCredential* cred) {
+    Serial.printf("\n[Credential] Generating for merchant: %s\n", merchant_id);
+    
+    // Increment transaction counter
+    transaction_counter++;
+    
+    // Get current timestamp
+    uint32_t timestamp = millis();
+    
+    // Store merchant ID
+    strncpy(cred->merchant_id, merchant_id, 31);
+    cred->merchant_id[31] = '\0';
+    
+    cred->timestamp = timestamp;
+    cred->counter = transaction_counter;
+    
+    // Derive credential ID: SHA-256(PNI + counter + merchant + timestamp)
+    mbedtls_sha256_context sha_ctx;
+    mbedtls_sha256_init(&sha_ctx);
+    mbedtls_sha256_starts(&sha_ctx, 0);  // SHA-256
+    
+    // Hash all inputs
+    mbedtls_sha256_update(&sha_ctx, pni->identifier, PNI_SIZE);
+    mbedtls_sha256_update(&sha_ctx, (uint8_t*)&transaction_counter, 4);
+    mbedtls_sha256_update(&sha_ctx, (uint8_t*)merchant_id, strlen(merchant_id));
+    mbedtls_sha256_update(&sha_ctx, (uint8_t*)&timestamp, 4);
+    
+    // Get 256-bit hash
+    uint8_t hash[32];
+    mbedtls_sha256_finish(&sha_ctx, hash);
+    mbedtls_sha256_free(&sha_ctx);
+    
+    // Take first 128 bits as credential ID
+    memcpy(cred->credential_id, hash, 16);
+    
+    // Generate HMAC signature using PNI as key
+    generate_signature(pni, cred);
+    
+    cred->is_valid = true;
+    
+    // Save updated counter to EEPROM
+    pni_gen.save_to_eeprom(pni);
+    
+    Serial.println("[Credential] Generated successfully");
+    print_credential(cred);
+  }
+  
+  // Generate HMAC-SHA256 signature
+  void generate_signature(PNI* pni, PaymentCredential* cred) {
+    // Create message to sign: credential_id + timestamp + counter + merchant
+    uint8_t message[64];
+    int msg_len = 0;
+    
+    memcpy(message + msg_len, cred->credential_id, 16);
+    msg_len += 16;
+    
+    memcpy(message + msg_len, &cred->timestamp, 4);
+    msg_len += 4;
+    
+    memcpy(message + msg_len, &cred->counter, 4);
+    msg_len += 4;
+    
+    memcpy(message + msg_len, cred->merchant_id, strlen(cred->merchant_id));
+    msg_len += strlen(cred->merchant_id);
+    
+    // HMAC with PNI as key
+    mbedtls_sha256_context sha_ctx;
+    mbedtls_sha256_init(&sha_ctx);
+    mbedtls_sha256_starts(&sha_ctx, 0);
+    
+    // Simple HMAC: hash(key + message)
+    mbedtls_sha256_update(&sha_ctx, pni->identifier, PNI_SIZE);
+    mbedtls_sha256_update(&sha_ctx, message, msg_len);
+    
+    mbedtls_sha256_finish(&sha_ctx, cred->signature);
+    mbedtls_sha256_free(&sha_ctx);
+  }
+  
+  // Print credential details
+  void print_credential(PaymentCredential* cred) {
+    Serial.print("[Credential] ID: ");
+    for (int i = 0; i < 16; i++) {
+      if (cred->credential_id[i] < 0x10) Serial.print("0");
+      Serial.print(cred->credential_id[i], HEX);
+    }
+    Serial.println();
+    
+    Serial.printf("[Credential] Counter: %u\n", cred->counter);
+    Serial.printf("[Credential] Timestamp: %u\n", cred->timestamp);
+    Serial.printf("[Credential] Merchant: %s\n", cred->merchant_id);
+    
+    Serial.print("[Credential] Signature: ");
+    for (int i = 0; i < 8; i++) {  // Show first 8 bytes
+      if (cred->signature[i] < 0x10) Serial.print("0");
+      Serial.print(cred->signature[i], HEX);
+    }
+    Serial.println("...");
+    
+    // Calculate validity window (5 minutes)
+    uint32_t valid_until = cred->timestamp + (5 * 60 * 1000);
+    uint32_t remaining = (valid_until > millis()) ? (valid_until - millis()) / 1000 : 0;
+    Serial.printf("[Credential] Valid for: %u seconds\n", remaining);
+  }
+  
+  // Verify credential is still valid
+  bool is_valid(PaymentCredential* cred) {
+    // Check 5-minute validity window
+    uint32_t age = millis() - cred->timestamp;
+    return age < (5 * 60 * 1000);  // 5 minutes
+  }
+};
+
+CredentialGenerator cred_gen;
 
 // ===================================================================
 // SETUP & MAIN LOOP
@@ -311,6 +451,7 @@ void loop() {
     
     if (cmd == "status") {
       pni_gen.print_pni(&current_pni);
+      Serial.printf("[Counter] Total transactions: %u\n", transaction_counter);
     }
     else if (cmd == "rotate") {
       pni_gen.rotate(&current_pni);
@@ -323,12 +464,30 @@ void loop() {
       }
       Serial.println("[Entropy] Pool updated");
     }
+    else if (cmd.startsWith("generate ")) {
+      // Extract merchant ID: "generate starbucks_sf_001"
+      String merchant = cmd.substring(9);
+      merchant.trim();
+      
+      if (merchant.length() > 0) {
+        PaymentCredential cred;
+        cred_gen.generate(&current_pni, merchant.c_str(), &cred);
+      } else {
+        Serial.println("[Error] Usage: generate <merchant_id>");
+      }
+    }
+    else if (cmd == "counter") {
+      Serial.printf("[Counter] Current: %u\n", transaction_counter);
+      Serial.printf("[Counter] Next: %u\n", transaction_counter + 1);
+    }
     else if (cmd == "help") {
       Serial.println("\nCommands:");
-      Serial.println("  status  - Show current PNI");
-      Serial.println("  rotate  - Force PNI rotation");
-      Serial.println("  entropy - Collect fresh entropy");
-      Serial.println("  help    - Show this menu");
+      Serial.println("  status           - Show current PNI and counter");
+      Serial.println("  rotate           - Force PNI rotation");
+      Serial.println("  entropy          - Collect fresh entropy");
+      Serial.println("  generate <id>    - Generate payment credential");
+      Serial.println("  counter          - Show transaction counter");
+      Serial.println("  help             - Show this menu");
     }
   }
   
