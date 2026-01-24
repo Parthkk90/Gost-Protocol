@@ -1,6 +1,6 @@
 # Ghost Protocol - Solana Deployment Success Report
 
-**Date**: January 21, 2026  
+**Date**: January 23, 2026  
 **Network**: Solana Devnet  
 **Status**: ✅ DEPLOYED SUCCESSFULLY
 
@@ -8,11 +8,15 @@
 
 ## Deployed Program
 
-**Program ID**: `78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS`  
-**Signature**: `5ehUJzFBtN5Wbzb9JWudbxStSHbMVWaRhzrcWnhxZHVBbVXXJ79pwmcABSyK4EcBGC8xJKm3Q117wxoXxhSghQ5E`  
+**Program ID**: `7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m`  
+**Signature**: `25e5XocVHKQgRNBNtEMjHFbx4tmPWAQTe5TLZmApgv3KJYY84iREJr7GiLNjNxZy1R5vqRSWx34wFtdQYsMi1oC3`  
 **Binary Size**: 315 KB  
 **Cluster**: https://api.devnet.solana.com  
-**Explorer**: https://explorer.solana.com/address/78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS?cluster=devnet
+**Explorer**: https://explorer.solana.com/address/7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m?cluster=devnet
+
+**Keypair Location**: `solana-program/target/deploy/ghost_protocol-keypair.json`  
+**Recovery Seed**: `oblige cart enough cluster thank special clip budget dolphin jeans mandate future`  
+**⚠️ IMPORTANT**: Keep this seed phrase and keypair file backed up - they are required to upgrade the program!
 
 ---
 
@@ -85,7 +89,7 @@ codegen-units = 1
 anchor_version = "0.32.1"
 
 [programs.devnet]
-ghost_protocol = "78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS"
+ghost_protocol = "7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m"
 
 [provider]
 cluster = "Devnet"
@@ -195,13 +199,17 @@ npm run test-payment <credential_from_esp32>
 ### Verification Commands
 ```bash
 # Check program deployment
-solana program show 78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS --url devnet
+solana program show 7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m --url devnet
 
 # View on explorer
-https://explorer.solana.com/address/78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS?cluster=devnet
+https://explorer.solana.com/address/7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m?cluster=devnet
 
 # Get program data account size
-solana account 78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS --url devnet
+solana account 7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m --url devnet
+
+# Verify keypair matches program
+solana address -k target/deploy/ghost_protocol-keypair.json
+# Should output: 7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m
 ```
 
 ---
@@ -283,14 +291,15 @@ solana-program/
 
 ## Contact & Resources
 
-**Program ID**: `78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS`  
+**Program ID**: `7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m`  
 **Network**: Solana Devnet  
-**Explorer**: https://explorer.solana.com/address/78U5SEuawfuyH5Mh61oxPxjGE4yZSN9UvUnmQ7TJGcDS?cluster=devnet  
+**Explorer**: https://explorer.solana.com/address/7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m?cluster=devnet  
 **Documentation**: See README.md and SOLANA_ARCHITECTURE.md
 
 ---
 
 **Status**: ✅ PRODUCTION READY FOR DEVNET TESTING  
-**Last Updated**: January 21, 2026  
+**Last Updated**: January 23, 2026  
 **Build Method**: cargo-build-sbf with blake3=1.5.5  
-**Deployment Method**: anchor deploy --provider.cluster devnet
+**Deployment Method**: solana program deploy with --program-id keypair  
+**Keypair Control**: ✅ YOU HAVE THE KEYPAIR - Can upgrade anytime
