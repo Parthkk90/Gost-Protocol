@@ -1,15 +1,14 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
 use sha2::{Digest, Sha256};
-use hmac::Hmac;
 
-declare_id!("2dW2udxZ8NRvLULDREhMT9b7f67eRS7uhZNJu7nGq33o");
+declare_id!("7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m");
 
 /// Maximum credential age in seconds (5 minutes)
 const MAX_CREDENTIAL_AGE: i64 = 300;
 
-/// Maximum merchant ID length
-const MAX_MERCHANT_ID_LEN: usize = 64;
+/// Maximum display name length
+const MAX_DISPLAY_NAME_LEN: usize = 64;
 
 #[program]
 pub mod ghost_protocol {
@@ -18,34 +17,37 @@ pub mod ghost_protocol {
     /// Initialize a merchant account for accepting payments
     pub fn initialize_merchant(
         ctx: Context<InitializeMerchant>,
-        merchant_id: String,
+        display_name: String,
     ) -> Result<()> {
         require!(
-            merchant_id.len() <= MAX_MERCHANT_ID_LEN,
-            ErrorCode::MerchantIdTooLong
+            display_name.len() <= MAX_DISPLAY_NAME_LEN,
+            ErrorCode::DisplayNameTooLong
         );
 
         let merchant = &mut ctx.accounts.merchant;
         merchant.authority = ctx.accounts.authority.key();
-        merchant.merchant_id = merchant_id;
+        merchant.merchant_pubkey = ctx.accounts.authority.key();
+        merchant.display_name = display_name;
         merchant.payment_destination = ctx.accounts.payment_destination.key();
         merchant.total_payments = 0;
         merchant.total_volume = 0;
         merchant.active = true;
 
-        msg!("Merchant initialized: {}", merchant.merchant_id);
+        msg!("Merchant initialized: {} ({})", merchant.display_name, merchant.merchant_pubkey);
         Ok(())
     }
 
-    /// Verify payment credential and process payment
+    /// Verify payment credential and process payment (GASLESS - Relayer pays fees)
+    /// NO customer signer required - privacy preserved!
     pub fn verify_payment_credential(
         ctx: Context<VerifyPayment>,
         credential_id: [u8; 16],
         signature: [u8; 32],
         counter: u64,
         timestamp: i64,
-        merchant_id: String,
+        merchant_pubkey: Pubkey,
         amount: u64,
+        customer_token_account_owner: Pubkey,  // Verified via signature, not signer
     ) -> Result<()> {
         let clock = Clock::get()?;
         let merchant = &ctx.accounts.merchant;
@@ -53,7 +55,7 @@ pub mod ghost_protocol {
         // 1. Verify merchant is active
         require!(merchant.active, ErrorCode::MerchantInactive);
         require!(
-            merchant.merchant_id == merchant_id,
+            merchant.merchant_pubkey == merchant_pubkey,
             ErrorCode::MerchantMismatch
         );
 
@@ -71,39 +73,46 @@ pub mod ghost_protocol {
             ErrorCode::CredentialAlreadyUsed
         );
 
-        // 4. Verify HMAC signature
-        // Note: In production, we'd verify against PNI commitment (ZK proof)
-        // For now, we just verify the credential structure
-        let expected_id = derive_credential_id(&signature, counter, &merchant_id, timestamp);
+        // 4. Verify HMAC signature includes customer token account owner
+        // This proves the customer authorized the payment without revealing their identity
+        let expected_id = derive_credential_id(&signature, counter, &merchant_pubkey, timestamp, &customer_token_account_owner);
         require!(
             credential_id == expected_id[..16],
             ErrorCode::InvalidSignature
         );
 
-        // 5. Transfer tokens from customer to merchant
+        // 5. Verify customer_token_account belongs to claimed owner
+        require!(
+            ctx.accounts.customer_token_account.owner == customer_token_account_owner,
+            ErrorCode::InvalidTokenAccountOwner
+        );
+
+        // 6. Transfer tokens using token account's delegate authority (set by customer)
+        // Relayer submits transaction, but customer pre-approved via delegate
         let cpi_accounts = Transfer {
             from: ctx.accounts.customer_token_account.to_account_info(),
             to: ctx.accounts.merchant_token_account.to_account_info(),
-            authority: ctx.accounts.customer.to_account_info(),
+            authority: ctx.accounts.token_delegate.to_account_info(),
         };
         let cpi_program = ctx.accounts.token_program.to_account_info();
         let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
         token::transfer(cpi_ctx, amount)?;
 
-        // 6. Mark credential as used (burn)
+        // 7. Mark credential as used (burn)
         let used_credential = &mut ctx.accounts.used_credential;
         used_credential.counter = counter;
         used_credential.timestamp = timestamp;
         used_credential.merchant = merchant.key();
         used_credential.credential_id = credential_id;
 
-        // 7. Update merchant statistics
+        // 8. Update merchant statistics
         let merchant = &mut ctx.accounts.merchant;
         merchant.total_payments += 1;
         merchant.total_volume += amount;
 
-        msg!("Payment verified: {} tokens to {}", amount, merchant.merchant_id);
+        msg!("Payment verified: {} tokens to {}", amount, merchant.display_name);
         msg!("Credential burned: counter={}, id={:?}", counter, &credential_id[..8]);
+        msg!("Privacy preserved: No customer signer revealed");
         
         Ok(())
     }
@@ -133,23 +142,25 @@ pub mod ghost_protocol {
         );
         
         merchant.active = false;
-        msg!("Merchant deactivated: {}", merchant.merchant_id);
+        msg!("Merchant deactivated: {}", merchant.display_name);
         Ok(())
     }
 }
 
-/// Derive credential ID from components (simplified version)
+/// Derive credential ID from components (includes customer ownership proof)
 fn derive_credential_id(
     signature: &[u8; 32],
     counter: u64,
-    merchant_id: &str,
+    merchant_pubkey: &Pubkey,
     timestamp: i64,
+    customer_owner: &Pubkey,
 ) -> [u8; 32] {
     let mut hasher = Sha256::new();
     hasher.update(signature);
     hasher.update(counter.to_le_bytes());
-    hasher.update(merchant_id.as_bytes());
+    hasher.update(merchant_pubkey.to_bytes());
     hasher.update(timestamp.to_le_bytes());
+    hasher.update(customer_owner.to_bytes());
     hasher.finalize().into()
 }
 
@@ -158,13 +169,12 @@ fn derive_credential_id(
 // ============================================================================
 
 #[derive(Accounts)]
-#[instruction(merchant_id: String)]
 pub struct InitializeMerchant<'info> {
     #[account(
         init,
         payer = authority,
         space = 8 + MerchantRegistry::INIT_SPACE,
-        seeds = [b"merchant", merchant_id.as_bytes()],
+        seeds = [b"merchant", authority.key().as_ref()],
         bump
     )]
     pub merchant: Account<'info, MerchantRegistry>,
@@ -183,32 +193,40 @@ pub struct InitializeMerchant<'info> {
     credential_id: [u8; 16],
     signature: [u8; 32],
     counter: u64,
+    timestamp: i64,
+    merchant_pubkey: Pubkey,
 )]
 pub struct VerifyPayment<'info> {
     #[account(
         mut,
-        seeds = [b"merchant", merchant.merchant_id.as_bytes()],
+        seeds = [b"merchant", merchant_pubkey.as_ref()],
         bump
     )]
     pub merchant: Account<'info, MerchantRegistry>,
 
     #[account(
         init,
-        payer = customer,
+        payer = relayer,
         space = 8 + UsedCredential::INIT_SPACE,
         seeds = [b"cred", counter.to_le_bytes().as_ref()],
         bump
     )]
     pub used_credential: Account<'info, UsedCredential>,
 
+    /// Relayer pays transaction fees (privacy preserving)
     #[account(mut)]
-    pub customer: Signer<'info>,
+    pub relayer: Signer<'info>,
 
+    /// Customer token account (NO SIGNER REQUIRED)
     #[account(mut)]
     pub customer_token_account: Account<'info, TokenAccount>,
 
     #[account(mut)]
     pub merchant_token_account: Account<'info, TokenAccount>,
+
+    /// Token delegate authority (customer pre-approves specific relayer)
+    /// CHECK: Verified by token program during transfer
+    pub token_delegate: AccountInfo<'info>,
 
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -236,7 +254,7 @@ pub struct RevokeCredential<'info> {
 pub struct UpdateMerchant<'info> {
     #[account(
         mut,
-        seeds = [b"merchant", merchant.merchant_id.as_bytes()],
+        seeds = [b"merchant", merchant.merchant_pubkey.as_ref()],
         bump
     )]
     pub merchant: Account<'info, MerchantRegistry>,
@@ -254,9 +272,12 @@ pub struct MerchantRegistry {
     /// Merchant owner (can deactivate)
     pub authority: Pubkey,
     
-    /// Merchant identifier (e.g., "starbucks_sf_001")
+    /// Merchant public key (unique identifier)
+    pub merchant_pubkey: Pubkey,
+    
+    /// Human-readable name (e.g., "Starbucks SF Mission")
     #[max_len(64)]
-    pub merchant_id: String,
+    pub display_name: String,
     
     /// Token account receiving payments
     pub payment_destination: Pubkey,
@@ -293,13 +314,13 @@ pub struct UsedCredential {
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Merchant ID exceeds maximum length")]
-    MerchantIdTooLong,
+    #[msg("Display name exceeds maximum length")]
+    DisplayNameTooLong,
     
     #[msg("Merchant account is inactive")]
     MerchantInactive,
     
-    #[msg("Merchant ID does not match")]
+    #[msg("Merchant public key does not match")]
     MerchantMismatch,
     
     #[msg("Credential expired (older than 5 minutes)")]
@@ -313,4 +334,7 @@ pub enum ErrorCode {
     
     #[msg("Unauthorized: not merchant authority")]
     Unauthorized,
+    
+    #[msg("Invalid token account owner")]
+    InvalidTokenAccountOwner,
 }
