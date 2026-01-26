@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-ghost_protocol = "2dW2udxZ8NRvLULDREhMT9b7f67eRS7uhZNJu7nGq33o"
+ghost_protocol = "7vMTXkMnG73kshMHLKft7T4fFEhCnNJF5ewEuD5Gbd2m"
 
 [registry]
 url = "https://api.apr.dev"
@@ -17,6 +17,3 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
-
-[profile.release]
-overflow-checks = true

@@ -9,11 +9,13 @@ crate-type = ["cdylib", "lib"]
 name = "ghost_protocol"
 
 [features]
-no-entrypoint = []
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 no-idl = []
+no-entrypoint = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
-default = []
+
 
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
