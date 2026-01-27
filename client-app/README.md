@@ -1,11 +1,12 @@
 # Ghost Protocol - Client Application
 
-User-facing payment client that orchestrates the complete flow.
+User-facing payment client that orchestrates the complete flow, now with **cross-chain Ghost Swap** support via SilentSwap V2.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
+npm install @silentswap/sdk  # For cross-chain features
 ```
 
 ## Configuration
@@ -14,38 +15,32 @@ Create `.env` file:
 ```bash
 ESP32_HOST=192.168.1.100
 RELAYER_URL=http://localhost:8080
-SOLANA_RPC=https://api.devnet.solana.com
+SOLANA_RPC=https://api.mainnet-beta.solana.com
 WALLET_PATH=~/.config/solana/id.json
+SILENT_SWAP_API_KEY=your_api_key  # For cross-chain swaps
 ```
 
-## Usage
+## New Feature: Cross-Chain Payments
 
-### Check System Status
+Ghost Protocol now supports private payments across blockchains! Shield SOL, swap to USDC/ETH, and deliver to merchants on Ethereum, Bitcoin, or other chains.
+
+### Usage for Cross-Chain Payment
 ```bash
-python payment_client.py --check-only
+# Use the new JavaScript client for cross-chain
+node ../ghost-swap-payment.mjs
 ```
 
-### Make a Payment
-```bash
-python payment_client.py \
-  --merchant FEEVdMzQFUEZQuX9nUtNCJcBecn3TArdKn5e7p64VNLe \
-  --amount 5.25 \
-  --token EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
-```
+Or integrate into Python client (future update).
 
-## What Happens
+## What Happens (Updated Flow)
 
 ```
 1. Client checks ESP32 + Relayer status
-2. Client looks up your token account
-3. Client requests credential from ESP32
-   → ESP32 generates PNI-based credential
-   → ESP32 triggers mimicry storm (50-70 decoys)
-4. Client forwards credential to relayer
-5. Relayer constructs Solana transaction
-6. Relayer signs and submits (pays gas)
-7. Smart contract verifies and processes
-8. Credential burned, payment complete
+2. Client creates SilentSwap order for cross-chain transfer
+3. ESP32 generates hardware entropy for ZK proofs
+4. Client executes deposit to SilentSwap vault
+5. Funds are shielded, swapped if needed, and delivered privately
+6. Merchant receives on target chain (untraceable)
 ```
 
 ## Privacy Guarantees

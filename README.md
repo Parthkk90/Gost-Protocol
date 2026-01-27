@@ -62,7 +62,43 @@ Ghost Protocol is a **zero-knowledge privacy payment system** that allows custom
 
 ---
 
-## 🔄 How Transactions Work - Step by Step
+## � Ghost Swap Upgrade: Cross-Chain Private Payments
+
+**Ghost Protocol now supports cross-chain payments with SilentSwap V2!** Instead of just shielding SOL on Solana, you can shield funds, swap assets, and deliver to merchants on any blockchain (Ethereum, Bitcoin, etc.) with enhanced privacy.
+
+### 🛡️ Why SilentSwap V2?
+| Feature | Privacy Cash (Previous) | SilentSwap V2 (Current) |
+|---------|------------------------|-------------------------|
+| Asset Variety | Mostly SOL/SPL | Cross-Chain (ETH, BTC, SOL, etc.) |
+| Privacy Tech | ZK-Merkle Trees | Shielded Privacy Chains + Mixnets |
+| Merchant Side | Receives same asset | Can swap to USDC during process |
+| Traceability | Difficult on-chain | Impossible (trail leaves the chain) |
+
+### ⚠️ Important Notes
+- **Wait Time**: 10-30 minutes for maximum anonymity (vs. instant Solana blocks)
+- **Slippage & Fees**: Exchange rate fluctuations during swaps
+- **SDK Version**: Requires `@silentswap/sdk@^2.0.0`
+- **API Key**: Set `SILENT_SWAP_API_KEY` in environment if required
+
+### 📦 Installation
+```bash
+npm install @silentswap/sdk
+```
+
+### 🔧 Usage Example
+```javascript
+import SilentGhostService from './silent-ghost-service.mjs';
+
+const service = new SilentGhostService(customerKeypair);
+const order = await service.createSilentOrder(merchantAddress, amount, 'ethereum');
+const tx = await service.executePayment(order);
+```
+
+See [ghost-swap-payment.mjs](ghost-swap-payment.mjs) for full implementation.
+
+---
+
+## �🔄 How Transactions Work - Step by Step
 
 ### **Step 1: Customer Initiates Private Payment**
 ```bash
