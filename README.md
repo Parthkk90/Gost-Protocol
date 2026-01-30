@@ -85,16 +85,26 @@ Ghost Protocol is a **zero-knowledge privacy payment system** that allows custom
 npm install @silentswap/sdk
 ```
 
-### 🔧 Usage Example
-```javascript
-import SilentGhostService from './silent-ghost-service.mjs';
+### 🔧 Usage Example (Mock Mode)
+Currently in mock mode for testing. For live Mainnet:
+- Replace mock quotes with `this.silent.getSwapQuotes(...)`
+- Use real `createOrder` and `executeOrder` from SDK
+- Ensure correct chain IDs and asset addresses
 
+```javascript
+// Mock example
 const service = new SilentGhostService(customerKeypair);
 const order = await service.createSilentOrder(merchantAddress, amount, 'ethereum');
 const tx = await service.executePayment(order);
 ```
 
 See [ghost-swap-payment.mjs](ghost-swap-payment.mjs) for full implementation.
+
+### ⚠️ Live Mode Notes
+- The current implementation uses mocks to demonstrate flow.
+- For real transactions, update to use actual SDK methods as per API docs.
+- Requires valid API key and sufficient SOL for fees + bridge costs.
+- Wait times: 10-30 minutes for privacy.
 
 ---
 

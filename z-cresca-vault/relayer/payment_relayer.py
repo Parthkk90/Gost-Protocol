@@ -32,6 +32,17 @@ from anchorpy import Provider, Wallet, Program, Context, Idl
 import httpx
 import json
 import struct
+import base64
+import hashlib
+
+# Import ESP32 entropy provider
+try:
+    from esp32_entropy import ESP32EntropyProvider
+    ESP32_AVAILABLE = True
+except ImportError:
+    ESP32_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("⚠️  esp32_entropy not found, using software fallback")
 
 # Load .env file if exists
 try:
@@ -86,29 +97,50 @@ class ZCrescaRelayer:
         relayer_keypair: Keypair,
         jupiter_api_url: str = "https://quote-api.jup.ag/v6",
         idl_path: Optional[str] = None,
+        privacy_cash_enabled: bool = True,
     ):
         self.rpc_url = rpc_url
         self.program_id = Pubkey.from_string(program_id)
         self.relayer_keypair = relayer_keypair
         self.jupiter_api_url = jupiter_api_url
+        self.privacy_cash_enabled = privacy_cash_enabled
         
         # Card hash → Vault mapping (in production: use database)
         self.card_to_vault: Dict[str, Pubkey] = {}
+        
+        # Privacy Cash SDK - burner wallet cache
+        self.privacy_burners: Dict[str, Dict[str, Any]] = {}  # nonce → burner data
         
         # Initialize Solana client
         self.connection = AsyncClient(rpc_url, commitment=Confirmed)
         self.wallet = Wallet(relayer_keypair)
         self.provider = Provider(self.connection, self.wallet)
         
+        # Initialize httpx client for Jupiter API
+        self.http_client = httpx.AsyncClient(timeout=30.0)
+        
+        # Initialize ESP32 entropy provider
+        self.esp32_entropy: Optional[ESP32EntropyProvider] = None
+        if privacy_cash_enabled and ESP32_AVAILABLE:
+            esp32_url = os.getenv("ESP32_ENTROPY_URL")
+            if esp32_url:
+                self.esp32_entropy = ESP32EntropyProvider(esp32_url)
+                logger.info(f"🎲 ESP32 entropy: {esp32_url}")
+            else:
+                logger.info(f"⚠️  ESP32_ENTROPY_URL not set, using software entropy")
+        
         # Load IDL if available
         self.program: Optional[Program] = None
+        self.idl_data: Optional[Dict] = None
         if idl_path and Path(idl_path).exists():
             try:
                 with open(idl_path) as f:
-                    idl_json = json.load(f)
-                    self.idl = Idl.from_json(json.dumps(idl_json))
-                    self.program = Program(self.idl, self.program_id, self.provider)
-                    logger.info(f"✅ Loaded IDL from {idl_path}")
+                    self.idl_data = json.load(f)
+                    # Store IDL data for manual instruction building
+                    logger.info(f"✅ Loaded IDL data from {idl_path}")
+                    logger.info(f"   Program address: {self.idl_data.get('address')}")
+                    # Note: Anchorpy may not support Anchor 0.32+ format yet
+                    # We'll use manual instruction building with IDL data
             except Exception as e:
                 logger.warning(f"⚠️  Failed to load IDL: {e}")
                 logger.info(f"   Will use manual account parsing")
@@ -119,6 +151,8 @@ class ZCrescaRelayer:
         logger.info(f"   RPC: {rpc_url}")
         logger.info(f"   Program: {program_id}")
         logger.info(f"   Relayer: {relayer_keypair.pubkey()}")
+        logger.info(f"🔐 Privacy Cash SDK: {'✅ Enabled' if self.privacy_cash_enabled else '❌ Disabled'}")
+        logger.info(f"🌐 Jupiter API: {self.jupiter_api_url}")
     
     async def register_card(self, card_hash: str, vault_pubkey: Pubkey):
         """Register a card with its vault (called during card activation)"""
@@ -321,11 +355,53 @@ class ZCrescaRelayer:
     
     async def get_swap_quote(self, usdc_out: int, sol_available: int) -> int:
         """Get Jupiter swap quote: How much SOL to swap for desired USDC"""
-        # TODO: Call Jupiter API
-        # For now, assume 1 SOL = $150
-        sol_needed = int((usdc_out / 1_000_000) * 1_000_000_000 / 150)
-        logger.info(f"🔄 Swap quote: {sol_needed / 1e9:.4f} SOL → ${usdc_out / 1e6:.2f} USDC")
-        return sol_needed
+        try:
+            # Token addresses
+            SOL_MINT = "So11111111111111111111111111111111111111112"
+            USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+            
+            # Jupiter v6 API: Get quote for swapping SOL → USDC
+            params = {
+                "inputMint": SOL_MINT,
+                "outputMint": USDC_MINT,
+                "amount": usdc_out,  # Desired USDC output (6 decimals)
+                "slippageBps": 50,  # 0.5% slippage
+                "swapMode": "ExactOut",  # We want exact USDC output
+            }
+            
+            logger.info(f"🔄 Requesting Jupiter quote...")
+            logger.info(f"   Output: ${usdc_out / 1e6:.2f} USDC")
+            
+            response = await self.http_client.get(
+                f"{self.jupiter_api_url}/quote",
+                params=params,
+            )
+            
+            if response.status_code != 200:
+                logger.warning(f"⚠️  Jupiter API error: {response.status_code}")
+                # Fallback to mock price
+                sol_needed = int((usdc_out / 1_000_000) * 1_000_000_000 / 150)
+                logger.info(f"   Using fallback: {sol_needed / 1e9:.4f} SOL")
+                return sol_needed
+            
+            quote_data = response.json()
+            sol_needed = int(quote_data["inAmount"])  # SOL in lamports
+            price_impact = float(quote_data.get("priceImpactPct", 0))
+            
+            logger.info(f"✅ Jupiter quote received:")
+            logger.info(f"   Input: {sol_needed / 1e9:.6f} SOL")
+            logger.info(f"   Output: ${usdc_out / 1e6:.2f} USDC")
+            logger.info(f"   Rate: 1 SOL = ${(usdc_out / 1e6) / (sol_needed / 1e9):.2f}")
+            logger.info(f"   Price impact: {price_impact:.4f}%")
+            
+            return sol_needed
+            
+        except Exception as e:
+            logger.error(f"❌ Jupiter API error: {e}")
+            # Fallback to mock price
+            sol_needed = int((usdc_out / 1_000_000) * 1_000_000_000 / 150)
+            logger.info(f"   Using fallback: {sol_needed / 1e9:.4f} SOL")
+            return sol_needed
     
     async def execute_payment_onchain(
         self,
@@ -502,6 +578,7 @@ async def main():
         program_id=os.getenv("PROGRAM_ID", "HX5nu29URyVfVFDsiVRumvf64egFydNqgGibBpPxt3nz"),
         relayer_keypair=relayer_keypair,
         idl_path=str(idl_path) if idl_path else None,
+        privacy_cash_enabled=os.getenv("PRIVACY_CASH_ENABLED", "true").lower() == "true",
     )
     
     # Start API server

@@ -1,0 +1,24 @@
+
+# Core
+solana>=0.34.0
+solders>=0.21.0
+anchorpy>=0.20.0
+
+# Web server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+httpx>=0.27.0
+
+# Privacy Cash SDK (for enhanced privacy)
+# Note: This is a placeholder - actual Privacy Cash SDK would be installed from npm/pypi
+# For now, we implement compatible interface
+# privacycash>=1.0.0  # Uncomment when available
+
+# Database (for production)
+asyncpg>=0.29.0  # PostgreSQL
+redis>=5.0.0     # Caching
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+structlog>=24.0.0
