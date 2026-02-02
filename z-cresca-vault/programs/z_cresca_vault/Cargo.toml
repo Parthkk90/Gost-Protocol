@@ -1,0 +1,36 @@
+[package]
+name = "z_cresca_vault"
+version = "0.1.0"
+description = "Z-Cresca Yield-Backed Credit Card Vault Program"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "z_cresca_vault"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]   
+
+[patch.crates-io]
+# Pin blake3 to 1.8.2 to avoid the Edition 2024 requirement
+blake3 = { git = "https://github.com/BLAKE3-team/BLAKE3", tag = "1.8.2" }
+[dependencies]
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+anchor-spl = "0.32.1"
+
+# Pyth Oracle
+pyth-solana-receiver-sdk = "0.2"
+
+# Cryptography
+sha2 = "0.10"
+hmac = "0.12"
+
+# Math & Time
+chrono = "0.4"
+
+

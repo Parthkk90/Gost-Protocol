@@ -119,6 +119,12 @@ class ZCrescaRelayer:
         # Initialize httpx client for Jupiter API
         self.http_client = httpx.AsyncClient(timeout=30.0)
         
+        # Initialize Privacy Cash Service connection
+        self.privacy_cash_service_url = os.getenv("PRIVACY_CASH_SERVICE_URL", "http://127.0.0.1:8081")
+        self.use_privacy_cash_sdk = os.getenv("USE_PRIVACY_CASH_SDK", "true").lower() == "true"
+        if self.use_privacy_cash_sdk:
+            logger.info(f"🔐 Privacy Cash SDK: {self.privacy_cash_service_url}")
+        
         # Initialize ESP32 entropy provider
         self.esp32_entropy: Optional[ESP32EntropyProvider] = None
         if privacy_cash_enabled and ESP32_AVAILABLE:
@@ -226,14 +232,20 @@ class ZCrescaRelayer:
                 vault_data["collateral_amount"],
             )
             
-            # Step 6: Execute payment on-chain
-            tx_sig = await self.execute_payment_onchain(
-                vault_pubkey=vault_pubkey,
-                burner_nonce=burner_nonce,
-                merchant_wallet=Pubkey.from_string(request.merchant_wallet),
-                amount_usdc=request.amount_usdc,
-                sol_amount_in=sol_amount_in,
-            )
+            # Step 6: Execute payment (with Privacy Cash SDK if enabled)
+            if self.use_privacy_cash_sdk:
+                tx_sig = await self.execute_private_payment_with_sdk(
+                    merchant_wallet=Pubkey.from_string(request.merchant_wallet),
+                    amount_sol=sol_amount_in / 1e9,  # Convert lamports to SOL
+                )
+            else:
+                tx_sig = await self.execute_payment_onchain(
+                    vault_pubkey=vault_pubkey,
+                    burner_nonce=burner_nonce,
+                    merchant_wallet=Pubkey.from_string(request.merchant_wallet),
+                    amount_usdc=request.amount_usdc,
+                    sol_amount_in=sol_amount_in,
+                )
             
             logger.info(f"✅ Payment approved: {tx_sig}")
             
@@ -462,6 +474,56 @@ class ZCrescaRelayer:
             logger.error(f"❌ Transaction failed: {e}", exc_info=True)
             raise
     
+    async def execute_private_payment_with_sdk(
+        self,
+        merchant_wallet: Pubkey,
+        amount_sol: float,
+    ) -> str:
+        """
+        Execute payment using Privacy Cash SDK via Node.js service
+        
+        This provides TRUE zero-knowledge privacy:
+        - Deposit to privacy pool
+        - Withdraw to merchant
+        - Untraceable on-chain
+        """
+        logger.info(f"🔐 Using Privacy Cash SDK for payment")
+        logger.info(f"   Amount: {amount_sol:.6f} SOL")
+        logger.info(f"   Recipient: {merchant_wallet}")
+        
+        try:
+            # Call Privacy Cash Service (Node.js)
+            response = await self.http_client.post(
+                f"{self.privacy_cash_service_url}/api/privacy/payment",
+                json={
+                    "amount_sol": amount_sol,
+                    "recipient": str(merchant_wallet),
+                },
+                timeout=60.0,  # Privacy proofs can take time
+            )
+            
+            if response.status_code != 200:
+                error_data = response.json()
+                raise Exception(f"Privacy Cash SDK error: {error_data.get('error')}")
+            
+            data = response.json()
+            
+            logger.info(f"✅ Private payment completed")
+            logger.info(f"   Deposit tx: {data['deposit_signature'][:16]}...")
+            logger.info(f"   Withdraw tx: {data['withdraw_signature'][:16]}...")
+            logger.info(f"   Privacy: ✅ Merchant cannot link to vault")
+            
+            # Return the withdraw signature (this is what merchant sees)
+            return data['withdraw_signature']
+            
+        except httpx.TimeoutException:
+            logger.error("❌ Privacy Cash SDK timeout - service may not be running")
+            logger.info("   Start service: node privacy_cash_service.mjs")
+            raise Exception("Privacy Cash service unavailable")
+        except Exception as e:
+            logger.error(f"❌ Privacy Cash SDK error: {e}")
+            raise
+    
     async def start(self, host: str = "0.0.0.0", port: int = 8080):
         """Start the relayer REST API server"""
         from fastapi import FastAPI, HTTPException
@@ -480,6 +542,148 @@ class ZCrescaRelayer:
         @app.get("/health")
         async def health():
             return {"status": "ok", "timestamp": datetime.now().isoformat()}
+        
+        # ===== VAULT ENDPOINTS =====
+        
+        @app.post("/api/v1/vault/create")
+        async def create_vault_endpoint(request: dict):
+            """Create new vault for user"""
+            try:
+                owner_pubkey = Pubkey.from_string(request["owner_pubkey"])
+                sol_amount = float(request["sol_amount"])
+                
+                # Create vault on-chain (placeholder - implement actual on-chain call)
+                logger.info(f"📦 Creating vault for {owner_pubkey} with {sol_amount} SOL")
+                
+                return {
+                    "vault_address": str(owner_pubkey),  # Mock: use owner as vault for now
+                    "credit_limit": sol_amount * 1.5,  # 150% LTV
+                    "collateral_amount": sol_amount,
+                }
+            except Exception as e:
+                logger.error(f"❌ Vault creation error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @app.get("/api/v1/vault/{vault_address}")
+        async def get_vault_endpoint(vault_address: str):
+            """Get vault details"""
+            try:
+                vault_pubkey = Pubkey.from_string(vault_address)
+                
+                # Mock response - implement actual on-chain fetch
+                return {
+                    "vault_address": vault_address,
+                    "collateral_amount": 2.5,
+                    "credit_limit": 3.75,
+                    "outstanding_balance": 1.2,
+                    "health_factor": 175,
+                    "ltv_ratio": 150,
+                }
+            except Exception as e:
+                raise HTTPException(status_code=404, detail="Vault not found")
+        
+        @app.post("/api/v1/vault/deposit")
+        async def deposit_collateral_endpoint(request: dict):
+            """Deposit collateral to vault"""
+            try:
+                vault_address = request["vault_address"]
+                amount = float(request["amount"])
+                
+                logger.info(f"💰 Depositing {amount} SOL to vault {vault_address}")
+                
+                return {
+                    "transaction_signature": "mock_deposit_sig_" + str(datetime.now().timestamp()),
+                    "new_collateral": amount,
+                    "new_credit_limit": amount * 1.5,
+                }
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @app.post("/api/v1/vault/withdraw")
+        async def withdraw_collateral_endpoint(request: dict):
+            """Withdraw collateral from vault"""
+            try:
+                vault_address = request["vault_address"]
+                amount = float(request["amount"])
+                
+                logger.info(f"💸 Withdrawing {amount} SOL from vault {vault_address}")
+                
+                return {
+                    "transaction_signature": "mock_withdraw_sig_" + str(datetime.now().timestamp()),
+                    "remaining_collateral": 2.0,
+                }
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @app.get("/api/v1/vault/{vault_address}/health")
+        async def get_vault_health_endpoint(vault_address: str):
+            """Get vault health status"""
+            return {
+                "health_factor": 175,
+                "status": "healthy",
+                "liquidation_risk": "low",
+            }
+        
+        # ===== CARD ENDPOINTS =====
+        
+        @app.post("/api/v1/card/register")
+        async def register_card_v2_endpoint(request: dict):
+            """Register NFC card (v2 endpoint matching mobile app)"""
+            try:
+                card_number = request.get("card_number")
+                card_name = request.get("card_name")
+                vault_address = request.get("vault_address")
+                
+                # Hash card number
+                card_hash = hashlib.sha256(card_number.encode()).hexdigest()
+                
+                vault_pubkey = Pubkey.from_string(vault_address)
+                await self.register_card(card_hash=card_hash, vault_pubkey=vault_pubkey)
+                
+                logger.info(f"💳 Card registered: {card_name} → {vault_address}")
+                
+                return {
+                    "success": True,
+                    "card_hash": card_hash,
+                    "card_name": card_name,
+                }
+            except Exception as e:
+                logger.error(f"❌ Card registration error: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @app.get("/api/v1/card/list")
+        async def list_cards_endpoint():
+            """List registered cards (mock data)"""
+            return [
+                {
+                    "id": "1",
+                    "card_hash": "abc123...",
+                    "card_name": "Main Card",
+                    "vault_address": "mock_vault_123",
+                    "last_4_digits": "1234",
+                    "created_at": datetime.now().isoformat(),
+                }
+            ]
+        
+        @app.get("/api/v1/card/{card_id}")
+        async def get_card_endpoint(card_id: str):
+            """Get card details"""
+            return {
+                "id": card_id,
+                "card_hash": "abc123...",
+                "card_name": "Main Card",
+                "vault_address": "mock_vault_123",
+                "last_4_digits": "1234",
+                "created_at": datetime.now().isoformat(),
+            }
+        
+        @app.delete("/api/v1/card/{card_id}")
+        async def delete_card_endpoint(card_id: str):
+            """Delete registered card"""
+            logger.info(f"🗑️  Deleting card {card_id}")
+            return {"success": True}
+        
+        # ===== PAYMENT ENDPOINTS =====
         
         @app.post("/api/v1/payment")
         async def process_payment_endpoint(request: dict):
@@ -503,6 +707,124 @@ class ZCrescaRelayer:
                 }
             else:
                 raise HTTPException(status_code=402, detail=response.error_message)
+        
+        @app.get("/api/v1/payment/status/{tx_id}")
+        async def get_payment_status_endpoint(tx_id: str):
+            """Get payment transaction status"""
+            return {
+                "tx_id": tx_id,
+                "status": "confirmed",
+                "timestamp": datetime.now().isoformat(),
+            }
+        
+        @app.get("/api/v1/transactions")
+        async def get_transactions_endpoint(
+            wallet: Optional[str] = None,
+            limit: int = 20,
+            offset: int = 0
+        ):
+            """Get transaction history"""
+            # Mock transaction data
+            transactions = [
+                {
+                    "id": "tx_1",
+                    "type": "payment",
+                    "amount": 25.50,
+                    "merchant": "Coffee Shop",
+                    "timestamp": datetime.now().isoformat(),
+                    "status": "completed",
+                    "privacy_score": 95,
+                    "burner_wallet": "mock_burner_123",
+                    "decoy_count": 5,
+                }
+            ]
+            return transactions
+        
+        @app.get("/api/v1/transactions/{tx_id}")
+        async def get_transaction_detail_endpoint(tx_id: str):
+            """Get transaction details"""
+            return {
+                "id": tx_id,
+                "type": "payment",
+                "amount": 25.50,
+                "merchant": "Coffee Shop",
+                "merchant_wallet": "mock_merchant_wallet",
+                "timestamp": datetime.now().isoformat(),
+                "status": "completed",
+                "privacy_score": 95,
+                "burner_wallet": "mock_burner_123",
+                "decoy_count": 5,
+                "signature": f"mock_sig_{tx_id}",
+            }
+        
+        @app.post("/api/v1/payment/cancel/{tx_id}")
+        async def cancel_payment_endpoint(tx_id: str):
+            """Cancel pending payment"""
+            logger.info(f"🚫 Cancelling payment {tx_id}")
+            return {"success": True, "message": "Payment cancelled"}
+        
+        # ===== PRIVACY ENDPOINTS =====
+        
+        @app.get("/api/v1/privacy/score/{tx_id}")
+        async def get_privacy_score_endpoint(tx_id: str):
+            """Get privacy score for transaction"""
+            return {
+                "tx_id": tx_id,
+                "privacy_score": 95,
+                "decoy_count": 5,
+                "entropy_source": "ESP32",
+            }
+        
+        # ===== MARKET DATA ENDPOINTS =====
+        
+        @app.get("/api/v1/market/sol-price")
+        async def get_sol_price_endpoint():
+            """Get current SOL price in USD"""
+            try:
+                # In production, fetch from Jupiter or Pyth
+                # For now, return approximate price
+                return {
+                    "price": 150.0,
+                    "change24h": 2.4,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @app.get("/api/v1/wallet/{wallet_address}/tokens")
+        async def get_wallet_tokens_endpoint(wallet_address: str):
+            """Get token balances for wallet"""
+            try:
+                # TODO: Fetch real token balances from Solana
+                return [
+                    {
+                        "symbol": "SOL",
+                        "name": "Solana",
+                        "balance": 2.5,
+                        "usdValue": 375.0,
+                        "change24h": 2.4,
+                        "mint": "So11111111111111111111111111111111111111112",
+                    },
+                    {
+                        "symbol": "USDC",
+                        "name": "USD Coin",
+                        "balance": 112.50,
+                        "usdValue": 112.50,
+                        "change24h": 0.0,
+                        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                    },
+                ]
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+        
+        @app.get("/api/v1/wallet/{wallet_address}/nfts")
+        async def get_wallet_nfts_endpoint(wallet_address: str):
+            """Get NFTs for wallet"""
+            try:
+                # TODO: Fetch real NFTs from Metaplex or similar
+                return []
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
         
         @app.post("/api/v1/register_card")
         async def register_card_endpoint(request: dict):
@@ -545,22 +867,56 @@ class ZCrescaRelayer:
 
 # Example usage
 async def main():
-    # Load relayer keypair from environment
+    # Load relayer keypair from JSON file or environment
+    relayer_keypair_path = os.getenv("RELAYER_KEYPAIR_PATH", "./relayer-keypair.json")
     relayer_secret = os.getenv("RELAYER_SECRET_KEY", "")
-    if not relayer_secret:
-        logger.error("❌ RELAYER_SECRET_KEY environment variable not set")
-        logger.error("")
-        logger.error("Quick start:")
-        logger.error("  1. Run: bash setup.sh")
-        logger.error("  2. Or manually create .env file with:")
-        logger.error("     RELAYER_SECRET_KEY=your_base58_secret_key")
-        logger.error("     SOLANA_RPC_URL=https://api.devnet.solana.com")
-        logger.error("     PROGRAM_ID=ZCrVau1tYqK7X2MpF9V8Z3mY4hR5wN6sT8dL1pQwR2z")
-        logger.error("")
-        logger.error("  Generate keypair: solana-keygen new --no-bip39-passphrase")
-        return
     
-    relayer_keypair = Keypair.from_base58_string(relayer_secret)
+    # Try loading from JSON file first
+    keypair_file = Path(relayer_keypair_path)
+    if keypair_file.exists():
+        try:
+            logger.info(f"🔑 Loading keypair from {keypair_file}")
+            with open(keypair_file, 'r') as f:
+                keypair_data = json.load(f)
+                if isinstance(keypair_data, list):
+                    relayer_keypair = Keypair.from_bytes(bytes(keypair_data))
+                    logger.info(f"✅ Loaded keypair successfully")
+                    logger.info(f"   Public Key: {relayer_keypair.pubkey()}")
+                else:
+                    raise ValueError("Invalid keypair format - expected array of bytes")
+        except Exception as e:
+            logger.error(f"❌ Failed to load keypair from {keypair_file}: {e}")
+            return
+    elif relayer_secret:
+        try:
+            logger.info(f"🔑 Loading keypair from RELAYER_SECRET_KEY")
+            # Validate length before attempting to decode
+            if len(relayer_secret) < 64:
+                raise ValueError(f"Secret key too short: {len(relayer_secret)} characters (expected 64+)")
+            
+            relayer_keypair = Keypair.from_base58_string(relayer_secret)
+            logger.info(f"✅ Loaded keypair successfully")
+            logger.info(f"   Public Key: {relayer_keypair.pubkey()}")
+        except Exception as e:
+            logger.error(f"❌ Invalid RELAYER_SECRET_KEY format: {e}")
+            logger.error("   Expected: base58-encoded secret key (64+ characters)")
+            logger.error(f"   Got: {len(relayer_secret)} characters")
+            logger.error("")
+            logger.error("   Your current RELAYER_SECRET_KEY appears to be a public key.")
+            logger.error("   You need the SECRET KEY (base58 string starting with private bytes)")
+            return
+    else:
+        logger.error("❌ No relayer keypair found")
+        logger.error("")
+        logger.error("  Option 1: Create relayer-keypair.json (RECOMMENDED)")
+        logger.error("     solana-keygen new --outfile relayer-keypair.json --no-bip39-passphrase")
+        logger.error("")
+        logger.error("  Option 2: Set RELAYER_SECRET_KEY in .env")
+        logger.error("     RELAYER_SECRET_KEY=your_base58_secret_key_here")
+        logger.error("")
+        logger.error("  Option 3: Set custom keypair path")
+        logger.error("     RELAYER_KEYPAIR_PATH=/path/to/your/keypair.json")
+        return
     
     # Find IDL file
     idl_path = Path(__file__).parent.parent / "target" / "idl" / "z_cresca_vault.json"
