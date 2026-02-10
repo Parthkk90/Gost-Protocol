@@ -48,7 +48,7 @@ Download from: https://www.arduino.cc/en/software
    ```
    ======================================
    Ghost Protocol - PNI Core v1.0
-   Personal Network Identifier System
+   Physical Noice Injector  System
    ======================================
    
    [PNI] Generating new identifier...

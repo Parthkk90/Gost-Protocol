@@ -1,4 +1,4 @@
-# Personal Network Identifier (PNI) Architecture
+# Physical Noice Injector  (PNI) Architecture
 
 ## What is PNI?
 

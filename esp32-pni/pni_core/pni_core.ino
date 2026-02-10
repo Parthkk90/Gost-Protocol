@@ -37,7 +37,7 @@ struct PNI {
 // Payment Credential
 struct PaymentCredential {
   uint8_t credential_id[16];          // 128-bit payment ID
-  uint32_t timestamp;                 // When generated
+  uint32_t timestamp;                 // Unix timestamp (from phone)
   uint32_t counter;                   // Transaction number
   char merchant_id[32];               // Merchant identifier
   uint8_t signature[32];              // HMAC-SHA256 signature
@@ -48,6 +48,7 @@ PNI current_pni;
 uint32_t transaction_counter = 0;     // Global counter for all payments
 uint8_t entropy_pool[ENTROPY_POOL_SIZE];
 uint16_t entropy_index = 0;
+int64_t network_timestamp = 0;        // Unix timestamp from phone (seconds)
 
 // ===================================================================
 // HARDWARE ENTROPY COLLECTION
@@ -277,21 +278,21 @@ PNIGenerator pni_gen;
 class CredentialGenerator {
 public:
   
-  // Generate payment credential from PNI
-  void generate(PNI* pni, const char* merchant_id, PaymentCredential* cred) {
+  // Generate payment credential from PNI (with phone-injected timestamp)
+  void generate(PNI* pni, const char* merchant_id, int64_t unix_timestamp, PaymentCredential* cred) {
     Serial.printf("\n[Credential] Generating for merchant: %s\n", merchant_id);
     
     // Increment transaction counter
     transaction_counter++;
     
-    // Get current timestamp
-    uint32_t timestamp = millis();
+    // Use timestamp from phone (network-synced) to avoid ESP32 clock drift
+    int64_t timestamp = unix_timestamp > 0 ? unix_timestamp : (millis() / 1000);
     
     // Store merchant ID
     strncpy(cred->merchant_id, merchant_id, 31);
     cred->merchant_id[31] = '\0';
     
-    cred->timestamp = timestamp;
+    cred->timestamp = (uint32_t)timestamp;  // Convert to uint32 for compatibility
     cred->counter = transaction_counter;
     
     // Derive credential ID: SHA-256(PNI + counter + merchant + timestamp)
@@ -471,9 +472,25 @@ void loop() {
       
       if (merchant.length() > 0) {
         PaymentCredential cred;
-        cred_gen.generate(&current_pni, merchant.c_str(), &cred);
+        // Use network timestamp if available, otherwise use millis
+        cred_gen.generate(&current_pni, merchant.c_str(), network_timestamp, &cred);
       } else {
         Serial.println("[Error] Usage: generate <merchant_id>");
+        Serial.println("[Error] Or: generate <merchant_id> <unix_timestamp>");
+      }
+    }
+    else if (cmd.startsWith("settime ")) {
+      // Phone app injects current Unix timestamp: "settime 1706234567"
+      String time_str = cmd.substring(8);
+      network_timestamp = time_str.toInt();
+      Serial.printf("[Time] Synced: %lld (Unix timestamp)\n", network_timestamp);
+      Serial.println("[Time] Clock drift protection enabled");
+    }
+    else if (cmd == "gettime") {
+      if (network_timestamp > 0) {
+        Serial.printf("[Time] Last synced: %lld\n", network_timestamp);
+      } else {
+        Serial.println("[Time] Not synced - using millis()");
       }
     }
     else if (cmd == "counter") {
@@ -486,6 +503,8 @@ void loop() {
       Serial.println("  rotate           - Force PNI rotation");
       Serial.println("  entropy          - Collect fresh entropy");
       Serial.println("  generate <id>    - Generate payment credential");
+      Serial.println("  settime <unix>   - Sync time from phone (prevents drift)");
+      Serial.println("  gettime          - Show current synced time");
       Serial.println("  counter          - Show transaction counter");
       Serial.println("  help             - Show this menu");
     }
