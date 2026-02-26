@@ -1,0 +1,17 @@
+{
+  "name": "client-app",
+  "version": "1.0.0",
+  "description": "User-facing payment client that orchestrates the complete flow.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "privacycash": "^1.1.11"
+  }
+}
