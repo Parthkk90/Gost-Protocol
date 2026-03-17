@@ -20,6 +20,11 @@
 #define ENTROPY_POOL_SIZE 128          // Entropy buffer size
 #define EEPROM_SIZE 512
 
+// WiFi settings (edit these)
+const char* WIFI_SSID = "YOUR_WIFI_SSID";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const uint32_t WIFI_CONNECT_TIMEOUT_MS = 30000;
+
 // Pin Configuration for Sensors
 #define MOTION_SENSOR_PIN 34           // Accelerometer/gyro
 #define TOUCH_SENSOR_PIN 27            // Touch sensor
@@ -132,6 +137,35 @@ private:
 HardwareEntropy hw_entropy;
 
 // ===================================================================
+// WIFI SETUP
+// ===================================================================
+
+void connect_wifi() {
+  if (String(WIFI_SSID) == "YOUR_WIFI_SSID") {
+    Serial.println("[WiFi] Skipped: set WIFI_SSID/WIFI_PASSWORD in config");
+    return;
+  }
+
+  Serial.printf("[WiFi] Connecting to %s\n", WIFI_SSID);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < WIFI_CONNECT_TIMEOUT_MS) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WiFi] Connected");
+    Serial.print("[WiFi] IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("\n[WiFi] Connection timed out");
+  }
+}
+
+// ===================================================================
 // PNI GENERATOR
 // ===================================================================
 
@@ -201,7 +235,7 @@ public:
   // Get device-specific ID (MAC address)
   void get_device_id(uint8_t* id) {
     uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    WiFi.macAddress(mac);
     
     // Derive 8-byte ID from 6-byte MAC
     memcpy(id, mac, 6);
@@ -408,6 +442,9 @@ void setup() {
   
   // Initialize EEPROM
   EEPROM.begin(EEPROM_SIZE);
+
+  // Optional WiFi for RSSI-based entropy
+  connect_wifi();
   
   // Initialize hardware entropy
   hw_entropy.begin();
