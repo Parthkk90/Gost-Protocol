@@ -202,7 +202,7 @@ public:
   // Get device-specific ID (MAC address)
   void get_device_id(uint8_t* id) {
     uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    WiFi.macAddress(mac);
     
     // Derive 8-byte ID from 6-byte MAC
     memcpy(id, mac, 6);
